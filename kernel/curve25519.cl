@@ -324,7 +324,7 @@ contract256_window4_modm(signed char r[64], __private const bignum256modm in) {
 		r[i] += carry;
 		r[i+1] += (r[i] >> 4);
 		r[i] &= 15;
-		carry = (r[i] >> 3);
+		carry = ((unsigned char)r[i] >> 3);
 		r[i] -= (carry << 4);
 	}
 	r[63] += carry;
@@ -958,7 +958,6 @@ static void
 curve25519_expand(__private bignum25519 out, const unsigned char in[32]) {
 	uint32_t x0,x1,x2,x3,x4,x5,x6,x7;
 
-#if defined(__ENDIAN_LITTLE__)
 	x0 = *(uint32_t *)(in + 0);
 	x1 = *(uint32_t *)(in + 4);
 	x2 = *(uint32_t *)(in + 8);
@@ -967,22 +966,6 @@ curve25519_expand(__private bignum25519 out, const unsigned char in[32]) {
 	x5 = *(uint32_t *)(in + 20);
 	x6 = *(uint32_t *)(in + 24);
 	x7 = *(uint32_t *)(in + 28);
-#else
-	#define F(s)                         \
-		((((uint32_t)in[s + 0])      ) | \
-		 (((uint32_t)in[s + 1]) <<  8) | \
-		 (((uint32_t)in[s + 2]) << 16) | \
-		 (((uint32_t)in[s + 3]) << 24))
-	x0 = F(0);
-	x1 = F(4);
-	x2 = F(8);
-	x3 = F(12);
-	x4 = F(16);
-	x5 = F(20);
-	x6 = F(24);
-	x7 = F(28);
-	#undef F
-#endif
 
 	out[0] = (                        x0       ) & 0x3ffffff;
 	out[1] = ((((uint64_t)x1 << 32) | x0) >> 26) & 0x1ffffff;

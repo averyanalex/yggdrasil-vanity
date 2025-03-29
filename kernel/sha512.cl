@@ -5,7 +5,7 @@
     MIT License
 
     Adapted for SHA512 by C.B .. apparently quite a while ago
-    The moral of the story is always use UL on unsigned longs!
+    The moral of the story is always use UL on ulongs!
 */
 
 // bitselect is "if c then b else a" for each bit
@@ -14,11 +14,14 @@
 // Cleverly determines majority vote, conditioning on x=z
 #define bit_maj(x, y, z) (bitselect(x, y, ((x) ^ (z))))
 
+#define SWAP(x) as_ulong(as_uchar8(x).s76543210)
+
 // Hopefully rotate works for long too?
 
 // ==============================================================================
 // =========  S0,S1,s0,s1 ======================================================
 
+#define rotr64(x, n) rotate(x, (ulong)(64 - n))
 #define S0(x) (rotr64(x, 28ul) ^ rotr64(x, 34ul) ^ rotr64(x, 39ul))
 #define S1(x) (rotr64(x, 14ul) ^ rotr64(x, 18ul) ^ rotr64(x, 41ul))
 
@@ -27,8 +30,8 @@
 
 // ==============================================================================
 // =========  MD-pads the input, taken from md5.cl =============================
-// Adapted for unsigned longs
-// Note that the padding is still in a distinct unsigned long to the appended
+// Adapted for ulongs
+// Note that the padding is still in a distinct ulong to the appended
 // length.
 
 // 'highBit' macro is (i+1) bytes, all 0 but the last which is 0x80
@@ -36,10 +39,10 @@
 // Don't forget to call constants longs!!
 #define highBit(i) (0x1UL << (8 * i + 7))
 #define fBytes(i) (0xFFFFFFFFFFFFFFFFUL >> (8 * (8 - i)))
-__constant unsigned long padLong[8] = {highBit(0), highBit(1), highBit(2),
+__constant ulong padLong[8] = {highBit(0), highBit(1), highBit(2),
                                        highBit(3), highBit(4), highBit(5),
                                        highBit(6), highBit(7)};
-__constant unsigned long maskLong[8] = {
+__constant ulong maskLong[8] = {
     0,         fBytes(1),
     fBytes(2), fBytes(3), // strange behaviour for fBytes(0)
     fBytes(4), fBytes(5),
@@ -49,7 +52,7 @@ __constant unsigned long maskLong[8] = {
 /* The standard padding, INPLACE,
     add a 1 bit, then little-endian original length mod 2^128 (not 64) at
    the end of a block RETURN number of blocks */
-static int md_pad_128(unsigned long *msg, const long msgLen_bytes) {
+static int md_pad_128(ulong *msg, const long msgLen_bytes) {
   /* Appends the 1 bit to the end, and 0s to the end of the byte */
   const unsigned int padLongIndex = ((unsigned int)msgLen_bytes) / 8;
   const unsigned int overhang =
@@ -85,7 +88,7 @@ static int md_pad_128(unsigned long *msg, const long msgLen_bytes) {
 
 // ==============================================================================
 
-__constant unsigned long k_sha256[80] = {
+__constant ulong k_sha256[80] = {
     0x428a2f98d728ae22UL, 0x7137449123ef65cdUL, 0xb5c0fbcfec4d3b2fUL,
     0xe9b5dba58189dbbcUL, 0x3956c25bf348b538UL, 0x59f111f1b605d019UL,
     0x923f82a4af194f9bUL, 0xab1c5ed5da6d8118UL, 0xd807aa98a3030242UL,
@@ -144,18 +147,18 @@ __constant unsigned long k_sha256[80] = {
   }
 
 /* The main hashing function */
-static void sha512_hash(unsigned long *input, const unsigned int length,
-                        unsigned long *hash) {
+static void sha512_hash(ulong *input, const unsigned int length,
+                        ulong *hash) {
   /* Do the padding - we weren't previously for some reason */
-  const unsigned int nBlocks = md_pad_128(input, (const unsigned long)length);
+  const unsigned int nBlocks = md_pad_128(input, (const ulong)length);
   /*if (length == 8){
       printf("Padded input: ");
       printFromLongFunc(input, hashBlockSize_bytes, true);
   }*/
 
-  unsigned long W[0x50] = {0};
+  ulong W[0x50] = {0};
   /* state which is repeatedly processed & added to */
-  unsigned long State[8] = {0};
+  ulong State[8] = {0};
   State[0] = 0x6a09e667f3bcc908UL;
   State[1] = 0xbb67ae8584caa73bUL;
   State[2] = 0x3c6ef372fe94f82bUL;
@@ -165,7 +168,7 @@ static void sha512_hash(unsigned long *input, const unsigned int length,
   State[6] = 0x1f83d9abfb41bd6bUL;
   State[7] = 0x5be0cd19137e2179UL;
 
-  unsigned long a, b, c, d, e, f, g, h;
+  ulong a, b, c, d, e, f, g, h;
 
   /* loop for each block */
   for (int block_i = 0; block_i < nBlocks; block_i++) {

@@ -1,4 +1,4 @@
-__kernel void generate_pubkey(__global uchar *results, __global uchar *keys) {
+__kernel void generate_pubkey(__global uchar *results __attribute__((aligned(32))), __global uchar *keys __attribute__((aligned(32)))) {
   size_t const thread = get_global_id(0);
   uchar key[32];
   for (size_t i = 0; i < 32; i++) {
@@ -6,7 +6,7 @@ __kernel void generate_pubkey(__global uchar *results, __global uchar *keys) {
   }
 
   uchar hash[64];
-  sha512_hash((unsigned long *)key, sizeof(key), (unsigned long *)hash);
+  sha512_hash((ulong *)key, sizeof(key), (ulong *)hash);
   hash[0] &= 248;
   hash[31] &= 63;
   hash[31] |= 64;

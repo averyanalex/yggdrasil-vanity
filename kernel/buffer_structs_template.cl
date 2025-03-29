@@ -26,7 +26,7 @@
 #define ctBufferSize ceilDiv(0, wordSize)
 
 // 
-#define hashBlockSize_bytes ceilDiv(1024, 8) /* Needs to be a multiple of 4, or 8 when we work with unsigned longs */
+#define hashBlockSize_bytes ceilDiv(1024, 8) /* Needs to be a multiple of 4, or 8 when we work with ulongs */
 #define hashDigestSize_bytes ceilDiv(512, 8)
 
 // just Size always implies _word
@@ -50,14 +50,14 @@
     // Initially for use in SHA-512
     #define hashBlockSize_long64 hashBlockSize
     #define hashDigestSize_long64 hashDigestSize
-    #define word unsigned long
+    #define word ulong
     #define rotl64(a,n) (rotate ((a), (n)))
     #define rotr64(a,n) (rotate ((a), (64ul-n)))
     
-    unsigned long SWAP (const unsigned long val)
+    ulong SWAP (const ulong val)
     {
         // ab cd ef gh -> gh ef cd ab using the 32 bit trick
-        unsigned long tmp = (rotr64(val & 0x0000FFFF0000FFFFUL, 16UL) | rotl64(val & 0xFFFF0000FFFF0000UL, 16UL));
+        ulong tmp = (rotr64(val & 0x0000FFFF0000FFFFUL, 16UL) | rotl64(val & 0xFFFF0000FFFF0000UL, 16UL));
         
         // Then see this as g- e- c- a- and -h -f -d -b to swap within the pairs,
         // gh ef cd ab -> hg fe dc ba
