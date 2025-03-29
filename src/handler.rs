@@ -1,5 +1,4 @@
 use chrono::Utc;
-use ed25519_dalek::SigningKey;
 use hex::ToHex;
 use regex::Regex;
 
@@ -31,14 +30,6 @@ pub fn handle_keypair(
             if re.is_match(str_addr)
                 && mlz.fetch_max(leading_zeros, Ordering::SeqCst) <= leading_zeros
             {
-                {
-                    let mut fixed_seed = [0; 32];
-                    fixed_seed.copy_from_slice(seed);
-                    let signing_key = SigningKey::from_bytes(&fixed_seed);
-                    let verifying_key_bytes = signing_key.verifying_key().to_bytes();
-                    assert_eq!(verifying_key_bytes, pk);
-                }
-
                 let mut sk = [0u8; 64];
                 sk[..32].copy_from_slice(seed);
                 sk[32..].copy_from_slice(pk);
