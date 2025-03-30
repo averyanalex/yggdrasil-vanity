@@ -41,7 +41,6 @@ impl Gpu {
     pub fn new(opts: GpuOptions) -> Result<Gpu> {
         let mut prog_bldr = ProgramBuilder::new();
         prog_bldr
-            .src(include_str!("../kernel/buffer_structs_template.cl"))
             .src(include_str!("../kernel/sha512.cl"))
             .src(include_str!("../kernel/curve25519-constants.cl"))
             .src(include_str!("../kernel/curve25519-constants2.cl"))

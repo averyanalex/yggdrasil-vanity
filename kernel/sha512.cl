@@ -1,91 +1,39 @@
-/*
-    Original copyright (sha256):
-    OpenCL Optimized kernel
-    (c) B. Kerler 2018
-    MIT License
+// Rotate right function for 64-bit unsigned integers.
+inline ulong sha512_rotr(ulong x, int n) { return (x >> n) | (x << (64 - n)); }
 
-    Adapted for SHA512 by C.B .. apparently quite a while ago
-    The moral of the story is always use UL on unsigned longs!
-*/
-
-// bitselect is "if c then b else a" for each bit
-// so equivalent to (c & b) | ((~c) & a)
-#define choose(x, y, z) (bitselect(z, y, x))
-// Cleverly determines majority vote, conditioning on x=z
-#define bit_maj(x, y, z) (bitselect(x, y, ((x) ^ (z))))
-
-// Hopefully rotate works for long too?
-
-// ==============================================================================
-// =========  S0,S1,s0,s1 ======================================================
-
-#define S0(x) (rotr64(x, 28ul) ^ rotr64(x, 34ul) ^ rotr64(x, 39ul))
-#define S1(x) (rotr64(x, 14ul) ^ rotr64(x, 18ul) ^ rotr64(x, 41ul))
-
-#define little_s0(x) (rotr64(x, 1ul) ^ rotr64(x, 8ul) ^ ((x) >> 7ul))
-#define little_s1(x) (rotr64(x, 19ul) ^ rotr64(x, 61ul) ^ ((x) >> 6ul))
-
-// ==============================================================================
-// =========  MD-pads the input, taken from md5.cl =============================
-// Adapted for unsigned longs
-// Note that the padding is still in a distinct unsigned long to the appended
-// length.
-
-// 'highBit' macro is (i+1) bytes, all 0 but the last which is 0x80
-//  where we are thinking Little-endian thoughts.
-// Don't forget to call constants longs!!
-#define highBit(i) (0x1UL << (8 * i + 7))
-#define fBytes(i) (0xFFFFFFFFFFFFFFFFUL >> (8 * (8 - i)))
-__constant unsigned long padLong[8] = {highBit(0), highBit(1), highBit(2),
-                                       highBit(3), highBit(4), highBit(5),
-                                       highBit(6), highBit(7)};
-__constant unsigned long maskLong[8] = {
-    0,         fBytes(1),
-    fBytes(2), fBytes(3), // strange behaviour for fBytes(0)
-    fBytes(4), fBytes(5),
-    fBytes(6), fBytes(7)};
-
-#define bs_long hashBlockSize_long64
-/* The standard padding, INPLACE,
-    add a 1 bit, then little-endian original length mod 2^128 (not 64) at
-   the end of a block RETURN number of blocks */
-static int md_pad_128(unsigned long *msg, const long msgLen_bytes) {
-  /* Appends the 1 bit to the end, and 0s to the end of the byte */
-  const unsigned int padLongIndex = ((unsigned int)msgLen_bytes) / 8;
-  const unsigned int overhang =
-      (((unsigned int)msgLen_bytes) - padLongIndex * 8);
-  /* Don't assume that there are zeros here! */
-  msg[padLongIndex] &= maskLong[overhang];
-  msg[padLongIndex] |= padLong[overhang];
-
-  /* Previous code was horrible
-      Now we zero until we reach a multiple of the block size,
-      Skipping TWO longs to ensure there is room for the length */
-  msg[padLongIndex + 1] = 0;
-  msg[padLongIndex + 2] = 0;
-  unsigned int i = 0;
-  for (i = padLongIndex + 3; i % bs_long != 0; i++) {
-    msg[i] = 0;
-  }
-
-  /* Determine the total number of blocks */
-  int nBlocks = i / bs_long;
-  /* Add the bit length to the end, 128-bit, big endian? (source wikipedia)
-     Seemingly this does require SWAPing, so perhaps it's little-endian? */
-  msg[i - 2] = 0; /* For clarity */
-  msg[i - 1] = SWAP(msgLen_bytes * 8);
-
-  return nBlocks;
+// Load big-endian 64-bit value from a 64-byte array.
+inline ulong sha512_load_be(const __private uchar *base, size_t offset)
+{
+    return ((ulong)base[offset + 7]) | ((ulong)base[offset + 6] << 8) |
+           ((ulong)base[offset + 5] << 16) | ((ulong)base[offset + 4] << 24) |
+           ((ulong)base[offset + 3] << 32) | ((ulong)base[offset + 2] << 40) |
+           ((ulong)base[offset + 1] << 48) | ((ulong)base[offset + 0] << 56);
 }
 
-#undef bs_long
-#undef def_md_pad_128
-#undef highBit
-#undef fBytes
+// Load big-endian 64-bit value from a 128-byte array.
+inline ulong sha512_load_be_128(const __private uchar *base, size_t offset)
+{
+    return ((ulong)base[offset + 7]) | ((ulong)base[offset + 6] << 8) |
+           ((ulong)base[offset + 5] << 16) | ((ulong)base[offset + 4] << 24) |
+           ((ulong)base[offset + 3] << 32) | ((ulong)base[offset + 2] << 40) |
+           ((ulong)base[offset + 1] << 48) | ((ulong)base[offset + 0] << 56);
+}
 
-// ==============================================================================
+// Store big-endian 64-bit value to a 64-byte array.
+inline void sha512_store_be(__private uchar *base, size_t offset, ulong x)
+{
+    base[offset + 7] = (uchar)(x & 0xFFUL);
+    base[offset + 6] = (uchar)((x >> 8) & 0xFFUL);
+    base[offset + 5] = (uchar)((x >> 16) & 0xFFUL);
+    base[offset + 4] = (uchar)((x >> 24) & 0xFFUL);
+    base[offset + 3] = (uchar)((x >> 32) & 0xFFUL);
+    base[offset + 2] = (uchar)((x >> 40) & 0xFFUL);
+    base[offset + 1] = (uchar)((x >> 48) & 0xFFUL);
+    base[offset + 0] = (uchar)((x >> 56) & 0xFFUL);
+}
 
-__constant unsigned long k_sha256[80] = {
+// The 80 SHA512 round constants.
+constant ulong SHA512_ROUND_CONSTANTS[80] = {
     0x428a2f98d728ae22UL, 0x7137449123ef65cdUL, 0xb5c0fbcfec4d3b2fUL,
     0xe9b5dba58189dbbcUL, 0x3956c25bf348b538UL, 0x59f111f1b605d019UL,
     0x923f82a4af194f9bUL, 0xab1c5ed5da6d8118UL, 0xd807aa98a3030242UL,
@@ -114,124 +62,194 @@ __constant unsigned long k_sha256[80] = {
     0x431d67c49c100d4cUL, 0x4cc5d4becb3e42b6UL, 0x597f299cfc657e2aUL,
     0x5fcb6fab3ad6faecUL, 0x6c44198c4a475817UL};
 
-#define SHA512_STEP(a, b, c, d, e, f, g, h, x, K)                              \
-  /**/                                                                         \
-  {                                                                            \
-    h += K + S1(e) + choose(e, f, g) + x; /* h = temp1 */                      \
-    d += h;                                                                    \
-    h += S0(a) + bit_maj(a, b, c);                                             \
-  }
+// The SHA512 state structure.
+typedef struct
+{
+    ulong st[8];
+} sha512_State;
 
-#define ROUND_STEP(i)                                                          \
-  /**/                                                                         \
-  {                                                                            \
-    SHA512_STEP(a, b, c, d, e, f, g, h, W[i + 0], k_sha256[i + 0]);            \
-    SHA512_STEP(h, a, b, c, d, e, f, g, W[i + 1], k_sha256[i + 1]);            \
-    SHA512_STEP(g, h, a, b, c, d, e, f, W[i + 2], k_sha256[i + 2]);            \
-    SHA512_STEP(f, g, h, a, b, c, d, e, W[i + 3], k_sha256[i + 3]);            \
-    SHA512_STEP(e, f, g, h, a, b, c, d, W[i + 4], k_sha256[i + 4]);            \
-    SHA512_STEP(d, e, f, g, h, a, b, c, W[i + 5], k_sha256[i + 5]);            \
-    SHA512_STEP(c, d, e, f, g, h, a, b, W[i + 6], k_sha256[i + 6]);            \
-    SHA512_STEP(b, c, d, e, f, g, h, a, W[i + 7], k_sha256[i + 7]);            \
-    SHA512_STEP(a, b, c, d, e, f, g, h, W[i + 8], k_sha256[i + 8]);            \
-    SHA512_STEP(h, a, b, c, d, e, f, g, W[i + 9], k_sha256[i + 9]);            \
-    SHA512_STEP(g, h, a, b, c, d, e, f, W[i + 10], k_sha256[i + 10]);          \
-    SHA512_STEP(f, g, h, a, b, c, d, e, W[i + 11], k_sha256[i + 11]);          \
-    SHA512_STEP(e, f, g, h, a, b, c, d, W[i + 12], k_sha256[i + 12]);          \
-    SHA512_STEP(d, e, f, g, h, a, b, c, W[i + 13], k_sha256[i + 13]);          \
-    SHA512_STEP(c, d, e, f, g, h, a, b, W[i + 14], k_sha256[i + 14]);          \
-    SHA512_STEP(b, c, d, e, f, g, h, a, W[i + 15], k_sha256[i + 15]);          \
-  }
+// Initialize a SHA512 state with IV.
+inline sha512_State sha512_State_new()
+{
+    sha512_State state;
+    // IV is defined as 64 bytes
+    const __private uchar IV[64] = {
+        0x6a, 0x09, 0xe6, 0x67, 0xf3, 0xbc, 0xc9, 0x08, 0xbb, 0x67, 0xae,
+        0x85, 0x84, 0xca, 0xa7, 0x3b, 0x3c, 0x6e, 0xf3, 0x72, 0xfe, 0x94,
+        0xf8, 0x2b, 0xa5, 0x4f, 0xf5, 0x3a, 0x5f, 0x1d, 0x36, 0xf1, 0x51,
+        0x0e, 0x52, 0x7f, 0xad, 0xe6, 0x82, 0xd1, 0x9b, 0x05, 0x68, 0x8c,
+        0x2b, 0x3e, 0x6c, 0x1f, 0x1f, 0x83, 0xd9, 0xab, 0xfb, 0x41, 0xbd,
+        0x6b, 0x5b, 0xe0, 0xcd, 0x19, 0x13, 0x7e, 0x21, 0x79};
 
-/* The main hashing function */
-static void sha512_hash(unsigned long *input, const unsigned int length,
-                        unsigned long *hash) {
-  /* Do the padding - we weren't previously for some reason */
-  const unsigned int nBlocks = md_pad_128(input, (const unsigned long)length);
-  /*if (length == 8){
-      printf("Padded input: ");
-      printFromLongFunc(input, hashBlockSize_bytes, true);
-  }*/
-
-  unsigned long W[0x50] = {0};
-  /* state which is repeatedly processed & added to */
-  unsigned long State[8] = {0};
-  State[0] = 0x6a09e667f3bcc908UL;
-  State[1] = 0xbb67ae8584caa73bUL;
-  State[2] = 0x3c6ef372fe94f82bUL;
-  State[3] = 0xa54ff53a5f1d36f1UL;
-  State[4] = 0x510e527fade682d1UL;
-  State[5] = 0x9b05688c2b3e6c1fUL;
-  State[6] = 0x1f83d9abfb41bd6bUL;
-  State[7] = 0x5be0cd19137e2179UL;
-
-  unsigned long a, b, c, d, e, f, g, h;
-
-  /* loop for each block */
-  for (int block_i = 0; block_i < nBlocks; block_i++) {
-    /* No need to (re-)initialise W.
-        Note that the input pointer is updated */
-    W[0] = SWAP(input[0]);
-    W[1] = SWAP(input[1]);
-    W[2] = SWAP(input[2]);
-    W[3] = SWAP(input[3]);
-    W[4] = SWAP(input[4]);
-    W[5] = SWAP(input[5]);
-    W[6] = SWAP(input[6]);
-    W[7] = SWAP(input[7]);
-    W[8] = SWAP(input[8]);
-    W[9] = SWAP(input[9]);
-    W[10] = SWAP(input[10]);
-    W[11] = SWAP(input[11]);
-    W[12] = SWAP(input[12]);
-    W[13] = SWAP(input[13]);
-    W[14] = SWAP(input[14]);
-    W[15] = SWAP(input[15]);
-
-    for (int i = 16; i < 80; i++) {
-      W[i] = W[i - 16] + little_s0(W[i - 15]) + W[i - 7] + little_s1(W[i - 2]);
+    for (int i = 0; i < 8; i++)
+    {
+        state.st[i] = sha512_load_be(IV, i * 8);
     }
-
-    a = State[0];
-    b = State[1];
-    c = State[2];
-    d = State[3];
-    e = State[4];
-    f = State[5];
-    g = State[6];
-    h = State[7];
-
-    /* Note loop is only 5 */
-    for (int i = 0; i < 80; i += 16) {
-      ROUND_STEP(i)
-    }
-
-    State[0] += a;
-    State[1] += b;
-    State[2] += c;
-    State[3] += d;
-    State[4] += e;
-    State[5] += f;
-    State[6] += g;
-    State[7] += h;
-
-    input += hashBlockSize_long64;
-  }
-
-  hash[0] = SWAP(State[0]);
-  hash[1] = SWAP(State[1]);
-  hash[2] = SWAP(State[2]);
-  hash[3] = SWAP(State[3]);
-  hash[4] = SWAP(State[4]);
-  hash[5] = SWAP(State[5]);
-  hash[6] = SWAP(State[6]);
-  hash[7] = SWAP(State[7]);
-  return;
+    return state;
 }
 
-#undef bit_maj
-#undef choose
-#undef S0
-#undef S1
-#undef little_s0
-#undef little_s1
+// Store the SHA512 state into a 64-byte output array.
+inline void sha512_State_store(const sha512_State *state,
+                               __private uchar *out)
+{
+    for (int i = 0; i < 8; i++)
+    {
+        sha512_store_be(out, i * 8, state->st[i]);
+    }
+}
+
+// Add two SHA512 states.
+inline void sha512_State_add(sha512_State *self, const sha512_State *other)
+{
+    for (int i = 0; i < 8; i++)
+    {
+        self->st[i] += other->st[i];
+    }
+}
+
+// The W structure for the message schedule.
+typedef struct
+{
+    ulong w[16];
+} sha512_W;
+
+// Initialize W struct from a 128-byte input block.
+inline sha512_W sha512_W_new(const __private uchar *input)
+{
+    sha512_W w_struct;
+    for (int i = 0; i < 16; i++)
+    {
+        w_struct.w[i] = sha512_load_be_128(input, i * 8);
+    }
+    return w_struct;
+}
+
+// Functions corresponding to SHA512 bitwise functions.
+inline ulong sha512_big_ch(ulong x, ulong y, ulong z)
+{
+    return (x & y) ^ ((~x) & z);
+}
+
+inline ulong sha512_big_maj(ulong x, ulong y, ulong z)
+{
+    return (x & y) ^ (x & z) ^ (y & z);
+}
+
+inline ulong sha512_big_sigma0(ulong x)
+{
+    return sha512_rotr(x, 28) ^ sha512_rotr(x, 34) ^ sha512_rotr(x, 39);
+}
+
+inline ulong sha512_big_sigma1(ulong x)
+{
+    return sha512_rotr(x, 14) ^ sha512_rotr(x, 18) ^ sha512_rotr(x, 41);
+}
+
+inline ulong sha512_sigma0(ulong x)
+{
+    return sha512_rotr(x, 1) ^ sha512_rotr(x, 8) ^ (x >> 7);
+}
+
+inline ulong sha512_sigma1(ulong x)
+{
+    return sha512_rotr(x, 19) ^ sha512_rotr(x, 61) ^ (x >> 6);
+}
+
+// Performs a single update on W.
+inline void sha512_W_big_m(sha512_W *w, int a, int b, int c, int d)
+{
+    w->w[a] = w->w[a] + sha512_sigma1(w->w[b]) + w->w[c] + sha512_sigma0(w->w[d]);
+}
+
+// Expand the message schedule.
+inline void sha512_W_expand(sha512_W *w)
+{
+    for (int i = 0; i < 16; i++)
+    {
+        sha512_W_big_m(w, i, (i + 14) & 15, (i + 9) & 15, (i + 1) & 15);
+    }
+}
+
+// Update the state with one round (big_f).
+inline void sha512_W_big_f(sha512_W *w, sha512_State *state, int i, ulong k)
+{
+    // The indices are calculated modulo 8 as in the original code.
+    int idx7 = (16 - i + 7) & 7;
+    int idx4 = (16 - i + 4) & 7;
+    int idx5 = (16 - i + 5) & 7;
+    int idx6 = (16 - i + 6) & 7;
+    int idx3 = (16 - i + 3) & 7;
+    int idx0 = (16 - i + 0) & 7;
+    int idx1 = (16 - i + 1) & 7;
+    int idx2 = (16 - i + 2) & 7;
+
+    state->st[idx7] =
+        state->st[idx7] + sha512_big_sigma1(state->st[idx4]) +
+        sha512_big_ch(state->st[idx4], state->st[idx5], state->st[idx6]) + k +
+        w->w[i];
+    state->st[idx3] = state->st[idx3] + state->st[idx7];
+    state->st[idx7] =
+        state->st[idx7] + sha512_big_sigma0(state->st[idx0]) +
+        sha512_big_maj(state->st[idx0], state->st[idx1], state->st[idx2]);
+}
+
+// Process 16 rounds over the state using W.
+inline void sha512_W_big_g(sha512_W *w, sha512_State *state, int s)
+{
+    // Each s processes 16 rounds
+    for (int i = 0; i < 16; i++)
+    {
+        sha512_W_big_f(w, state, i, SHA512_ROUND_CONSTANTS[s * 16 + i]);
+    }
+}
+
+// Process a full 128-byte message block.
+inline void sha512_State_blocks(__private sha512_State *state,
+                                const __private uchar *input)
+{
+    sha512_State t = *state;
+    sha512_W w = sha512_W_new(input);
+
+    for (int s = 0; s < 4; s++)
+    {
+        sha512_W_big_g(&w, &t, s);
+        sha512_W_expand(&w);
+    }
+
+    // One final group of 16 rounds without expanding
+    sha512_W_big_g(&w, &t, 4);
+    sha512_State_add(&t, state);
+    *state = t;
+}
+
+// The main hash function.
+// input: pointer to 32 bytes (in private address space)
+// out: pointer to 64 bytes (in private address space) where the digest will be
+// stored.
+void sha512_hash(const __private uchar *input, __private uchar *out)
+{
+    // Initialize state.
+    sha512_State state = sha512_State_new();
+
+    // Prepare a 128-byte padded block.
+    __private uchar padded[128] = {0};
+    for (int i = 0; i < 32; i++)
+    {
+        padded[i] = input[i];
+    }
+    padded[32] = 0x80; // append the '1' bit.
+
+    // Append the length: in SHA512 the length in bits is stored in the last 8
+    // bytes. For a 32-byte message, the bit-length is 256.
+    ulong bits = 32 * 8;
+    for (int i = 0; i < 8; i++)
+    {
+        padded[128 - 8 + i] = (uchar)((bits >> (56 - i * 8)) & 0xFFUL);
+    }
+
+    // Process the (single) block.
+    sha512_State_blocks(&state, padded);
+
+    // Store the final state into out.
+    sha512_State_store(&state, out);
+}
