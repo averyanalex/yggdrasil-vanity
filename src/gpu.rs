@@ -15,7 +15,6 @@ use ocl::Buffer;
 use ocl::Platform;
 use ocl::ProQue;
 use ocl::Result;
-use rand::RngCore;
 use rayon::prelude::*;
 use regex::Regex;
 
@@ -219,22 +218,27 @@ fn handle_keypairs(
     csv_file: &Option<Mutex<fs::File>>,
 ) {
     pubkeys
-        .par_chunks_exact(32)
-        .zip(seeds.par_chunks_exact(32))
-        .for_each(|(pk, seed)| {
-            handle_keypair(
-                seed,
-                pk,
-                regex_sources,
-                regexes,
-                max_leading_zeros,
-                csv_file,
-            )
+        .par_chunks(1024 * 32)
+        .zip(seeds.par_chunks_exact(1024 * 32))
+        .for_each(|(pks, seeds)| {
+            for (pk, seed) in pks.chunks_exact(32).zip(seeds.chunks_exact(32)) {
+                handle_keypair(
+                    seed,
+                    pk,
+                    regex_sources,
+                    regexes,
+                    max_leading_zeros,
+                    csv_file,
+                )
+            }
         });
 }
 
 fn gen_random_seeds(seeds: &mut [u8]) {
     seeds.par_chunks_exact_mut(128 * 1024).for_each(|seed| {
-        rand::thread_rng().fill_bytes(seed);
+        // rand::thread_rng().fill_bytes(seed);
+        for s in seed {
+            *s = 42;
+        }
     })
 }
