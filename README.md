@@ -29,6 +29,7 @@ Example:
 ## Benchmarks
 
 - AMD Radeon RX 6800 XT: 25 MH/s
+- Intel Iris Xe TGL GT2 (integrated in i5-1135G7): 0.67 MH/s
 
 Feel free to add your results and report hardware-specific issues!
 
