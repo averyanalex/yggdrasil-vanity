@@ -14,6 +14,7 @@ cargo run --release
 # or download and run
 ./yggdrasil-vanity
 ```
+Threads count for OpenCL can be set via the corresponding commandline option, for non-OpenCL runs (i.e. CPU-only) you [can use](https://github.com/rayon-rs/rayon/blob/main/FAQ.md) RAYON_NUM_THREADS environment variable to set the desired number of threads.
 
 ## Regex matching
 
